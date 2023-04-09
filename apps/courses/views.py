@@ -52,8 +52,6 @@ infura_url=settings.INFURA_URL
 web3 = Web3(Web3.HTTPProvider(infura_url))
 from asgiref.sync import sync_to_async,async_to_sync
 
-courses_ms_url=settings.COURSES_MS_URL
-product_ms_url=settings.PRODUCTS_MS_URL
 coupons_ms_url=settings.COUPONS_MS_URL
 auth_ms_url=settings.AUTH_MS_URL
 cryptography_ms_url=settings.CRYPTOGRAPHY_MS_URL

@@ -11,8 +11,6 @@ env = environ.Env()
 environ.Env.read_env()
 
 DOMAIN = os.environ.get('DOMAIN')
-COURSES_MS_URL = os.environ.get('COURSES_MS_URL')
-PRODUCTS_MS_URL = os.environ.get('PRODUCTS_MS_URL')
 COUPONS_MS_URL = os.environ.get('COUPONS_MS_URL')
 AUTH_MS_URL = os.environ.get('AUTH_MS_URL')
 CRYPTOGRAPHY_MS_URL = os.environ.get('CRYPTOGRAPHY_MS_URL')
