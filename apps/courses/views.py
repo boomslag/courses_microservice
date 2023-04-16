@@ -25,7 +25,7 @@ from django.core.cache import cache
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import cache_page
 from .pagination import SmallSetPagination, MediumSetPagination, LargeSetPagination
-import re
+import secrets
 from decimal import Decimal
 from django.core.validators import validate_slug
 from django.shortcuts import get_object_or_404
@@ -290,8 +290,8 @@ class CreateCourseView(StandardAPIView):
             )
             sellers = Sellers.objects.create(
                 author=payload['user_id'],
-                address=payload['address'],
-                polygon_address=payload['polygon_address'],
+                address=data['ethAddress'],
+                polygon_address=data['polygonAddress'],
                 course=course 
                 )
             course.sellers.add(sellers)
@@ -345,7 +345,7 @@ class EditCourseGoalsView(StandardAPIView):
         payload = validate_token(request)
         user_id = payload['user_id']
         try:
-            course = Course.objects.get(id=self.request.data['courseUUID'][0], author=user_id)
+            course = Course.objects.get(id=self.request.data['courseUUID'], author=user_id)
             bool = self.request.data['bool']
             course.goals = bool
             course.save()
@@ -430,10 +430,9 @@ class UpdateCourseView(StandardAPIView):
         payload = validate_token(request)
         user_id = payload['user_id']
         data = self.request.data
-
         try:
-            course = get_object_or_404(Course, id=data['courseUUID'][0], author=user_id)
-            course_data = json.loads(data['courseBody'])
+            course = get_object_or_404(Course, id=data['courseUUID'], author=user_id)
+            course_data = data['courseBody']
 
             # updating fields based on user inputs
             update_data = {}
@@ -452,7 +451,6 @@ class UpdateCourseView(StandardAPIView):
             if course_data.get('category'):
                 category = Category.objects.get(id=int(course_data['category']))
                 update_data['category'] = category
-
 
             # update the fields in the database
             Course.objects.filter(id=course.id).update(**update_data)
@@ -513,12 +511,14 @@ class UpdateCoursePricingView(StandardAPIView):
     def put(self, request, format=None):
         payload = validate_token(request)
         user_id = payload['user_id']
-        guy = payload['polygon_address']
         data = self.request.data
 
+
         try:
-            course = get_object_or_404(Course, id=data['courseUUID'][0], author=user_id)
+            course = get_object_or_404(Course, id=data['courseUUID'], author=user_id)
             course_data = json.loads(data['courseBody'])
+            sellers = Sellers.objects.filter(course=course)
+            guy = sellers[0].polygon_address
 
             # updating fields based on user inputs
             update_data = {}
@@ -595,7 +595,7 @@ class EditCourseStructureView(StandardAPIView):
             payload = validate_token(request)
             user_id = payload['user_id']
 
-            course = Course.objects.get(id=self.request.data['courseUUID'][0], author=user_id)
+            course = Course.objects.get(id=self.request.data['courseUUID'], author=user_id)
 
             bool = self.request.data['bool']
             course.course_structure = bool
@@ -616,7 +616,7 @@ class EditCourseSetupView(StandardAPIView):
             payload = validate_token(request)
             user_id = payload['user_id']
 
-            course = Course.objects.get(id=self.request.data['courseUUID'][0], author=user_id)
+            course = Course.objects.get(id=self.request.data['courseUUID'], author=user_id)
 
             bool = self.request.data['bool']
             course.setup = bool
@@ -637,7 +637,7 @@ class EditCourseFilmView(StandardAPIView):
             payload = validate_token(request)
             user_id = payload['user_id']
 
-            course = Course.objects.get(id=self.request.data['courseUUID'][0], author=user_id)
+            course = Course.objects.get(id=self.request.data['courseUUID'], author=user_id)
 
             bool = self.request.data['bool']
             course.film = bool
@@ -658,7 +658,7 @@ class EditCourseCurriculumView(StandardAPIView):
             payload = validate_token(request)
             user_id = payload['user_id']
 
-            course = Course.objects.get(id=self.request.data['courseUUID'][0], author=user_id)
+            course = Course.objects.get(id=self.request.data['courseUUID'], author=user_id)
 
             bool = self.request.data['bool']
             course.curriculum = bool
@@ -700,7 +700,7 @@ class EditCourseAccessibilityView(StandardAPIView):
             payload = validate_token(request)
             user_id = payload['user_id']
 
-            course = Course.objects.get(id=self.request.data['courseUUID'][0], author=user_id)
+            course = Course.objects.get(id=self.request.data['courseUUID'], author=user_id)
 
             bool = self.request.data['bool']
             course.accessibility = bool
@@ -721,7 +721,7 @@ class EditCourseLandingPageView(StandardAPIView):
             payload = validate_token(request)
             user_id = payload['user_id']
 
-            course = Course.objects.get(id=self.request.data['courseUUID'][0], author=user_id)
+            course = Course.objects.get(id=self.request.data['courseUUID'], author=user_id)
 
             bool = self.request.data['bool']
             course.landing_page = bool
@@ -742,7 +742,7 @@ class EditCoursePricingView(StandardAPIView):
             payload = validate_token(request)
             user_id = payload['user_id']
 
-            course = Course.objects.get(id=self.request.data['courseUUID'][0], author=user_id)
+            course = Course.objects.get(id=self.request.data['courseUUID'], author=user_id)
 
             bool = self.request.data['bool']
             course.pricing = bool
@@ -763,7 +763,7 @@ class EditCoursePromotionsView(StandardAPIView):
             payload = validate_token(request)
             user_id = payload['user_id']
 
-            course = Course.objects.get(id=self.request.data['courseUUID'][0], author=user_id)
+            course = Course.objects.get(id=self.request.data['courseUUID'], author=user_id)
 
             bool = self.request.data['bool']
             course.promotions = bool
@@ -784,7 +784,7 @@ class EditCourseMessagesView(StandardAPIView):
             payload = validate_token(request)
             user_id = payload['user_id']
 
-            course = Course.objects.get(id=self.request.data['courseUUID'][0], author=user_id)
+            course = Course.objects.get(id=self.request.data['courseUUID'], author=user_id)
 
             welcomeMessage = self.request.data['welcomeMessage']
             congratsMessage = self.request.data['congratsMessage']
@@ -835,13 +835,13 @@ class EditCourseNFTAddressView(StandardAPIView):
         payload = validate_token(request)
         user_id = payload['user_id']
 
-        course = Course.objects.get(id=self.request.data['courseUUID'][0], author=user_id)
+        course = Course.objects.get(id=self.request.data['courseUUID'], author=user_id)
 
         nft_address = self.request.data['nftAddress']
 
         course.nft_address = nft_address
         course.save()
-        course_data = get_course_data(self.request.data['courseUUID'][0],user_id)
+        course_data = get_course_data(self.request.data['courseUUID'],user_id)
         return self.send_response(course_data, status=status.HTTP_200_OK)
         # except Course.DoesNotExist:
         #     return self.send_error('Course with this ID does not exist or user_id not match with course author',
@@ -903,8 +903,8 @@ class PublishCourseView(StandardAPIView):
             payload = validate_token(request)
             user_id = payload['user_id']
 
-            course = Course.objects.get(id=self.request.data['courseUUID'][0], author=user_id)
-            course_data = get_course_data(self.request.data['courseUUID'][0],user_id)
+            course = Course.objects.get(id=self.request.data['courseUUID'], author=user_id)
+            course_data = get_course_data(self.request.data['courseUUID'],user_id)
             publish = self.request.data['bool']
             if publish==True:
                 course.status = 'published'
@@ -931,7 +931,7 @@ class SetCourseMessagesView(StandardAPIView):
             payload = validate_token(request)
             user_id = payload['user_id']
 
-            course = Course.objects.get(id=self.request.data['courseUUID'][0], author=user_id)
+            course = Course.objects.get(id=self.request.data['courseUUID'], author=user_id)
 
             setMessages = self.request.data['bool']
             course.allow_messages = setMessages
@@ -952,7 +952,7 @@ class DeleteCourseView(StandardAPIView):
         payload = validate_token(request)
         user_id = payload['user_id']
 
-        course = get_object_or_404(Course, id=self.request.data['courseUUID'][0], author=user_id)
+        course = get_object_or_404(Course, id=self.request.data['courseUUID'], author=user_id)
         item={}
         item['id']=str(course.id)
         item['seller_id']=str(course.author)
@@ -989,7 +989,7 @@ class CreateSectionCourseView(StandardAPIView):
         title=data['title']
         learning_objective=data['learningObjective']
         number=data['number']
-        courseUUID=data['courseUUID'][0]
+        courseUUID=data['courseUUID']
         course = get_object_or_404(Course, id=courseUUID, author=user_id)
 
         section = Section(
@@ -1072,14 +1072,16 @@ class EditSectionView(StandardAPIView):
 
 class DeleteSectionView(StandardAPIView):
     permission_classes = (permissions.AllowAny,)
-    def post(self, request, format=None):
+
+    def delete(self, request, format=None):
 
         payload = validate_token(request)
         user_id = payload['user_id']
 
         try:
+            sectionUUID = request.GET.get('sectionUUID')
 
-            section = get_object_or_404(Section, id=self.request.data['sectionUUID'], user=user_id)
+            section = get_object_or_404(Section, id=sectionUUID, user=user_id)
             course=Course.objects.get(sections=section)
 
             for episode in section.episodes.all():
@@ -1091,14 +1093,12 @@ class DeleteSectionView(StandardAPIView):
             return self.send_response(serializer.data, status=status.HTTP_200_OK)
         except ObjectDoesNotExist:
                 return self.send_error("Section not found", status=status.HTTP_404_NOT_FOUND)
-        except Exception as e:
-            return self.send_error(str(e), status=status.HTTP_400_BAD_REQUEST)
         except ValidationError as v:
             return self.send_error(str(v), status=status.HTTP_400_BAD_REQUEST)
-        except ObjectDoesNotExist as o:
-            return self.send_error(str(o), status=status.HTTP_404_NOT_FOUND)
         except Http404 as h:
             return self.send_error(str(h), status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return self.send_error(str(e), status=status.HTTP_400_BAD_REQUEST)
 
 # ============= COURSE EPISODES ============
 
@@ -1108,7 +1108,7 @@ class CreateEpisodeView(StandardAPIView):
         payload = validate_token(request)
         user_id = payload['user_id']
 
-        course = Course.objects.get(id=self.request.data['courseUUID'][0])
+        course = Course.objects.get(id=self.request.data['courseUUID'])
         section = Section.objects.get(id=self.request.data['sectionUUID'])
         
         episode = Episode.objects.create(
@@ -1128,14 +1128,16 @@ class CreateEpisodeView(StandardAPIView):
 
 class DeleteEpisodeView(StandardAPIView):
     permission_classes = (permissions.AllowAny,)
-    def post(self, request, format=None):
+    def delete(self, request, format=None):
 
         payload = validate_token(request)
         user_id = payload['user_id']
 
-        try:
 
-            episode = get_object_or_404(Episode, id=self.request.data['episodeUUID'], user=user_id)
+        try:
+            episodeUUID = request.GET.get('episodeUUID')
+
+            episode = get_object_or_404(Episode, id=episodeUUID, user=user_id)
 
             for resource in episode.resources.all():
                 resource.delete()
@@ -1147,14 +1149,12 @@ class DeleteEpisodeView(StandardAPIView):
             return self.send_response('Episdoe deleted', status=status.HTTP_200_OK)
         except ObjectDoesNotExist:
                 return self.send_error("Section not found", status=status.HTTP_404_NOT_FOUND)
-        except Exception as e:
-            return self.send_error(str(e), status=status.HTTP_400_BAD_REQUEST)
         except ValidationError as v:
             return self.send_error(str(v), status=status.HTTP_400_BAD_REQUEST)
-        except ObjectDoesNotExist as o:
-            return self.send_error(str(o), status=status.HTTP_404_NOT_FOUND)
         except Http404 as h:
             return self.send_error(str(h), status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return self.send_error(str(e), status=status.HTTP_400_BAD_REQUEST)
 
 
 class EditEpisodeVideo(StandardAPIView):
@@ -1284,24 +1284,28 @@ class DeleteEpisodeContent(StandardAPIView):
             return self.send_error(str(e), status=status.HTTP_400_BAD_REQUEST)
 
 
-
 class EditEpisodeResourceView(StandardAPIView):
     permission_classes = (permissions.AllowAny,)
     parser_classes = [MultiPartParser, FormParser]
+
     def put(self, request):
         payload = validate_token(request)
         user_id = payload['user_id']
 
         try:
-            episode = get_object_or_404(Episode, id=self.request.data['episodeUUID'], user=user_id)
-            resourceUUID = self.request.data.get('resourceUUID')
-            if resourceUUID:
-                resource = get_object_or_404(Resource, id=resourceUUID, user=user_id)
-                resource.file = self.request.data['file']
-                resource.title = self.request.data['fileName']
+            episode_uuid = request.data['episodeUUID']
+            episode = get_object_or_404(Episode, id=episode_uuid, user=user_id)
+            resource_uuid = request.data.get('resourceUUID')
+            file_data = request.FILES['file']
+            file_name = request.data['fileName']
+
+            if resource_uuid:
+                resource = get_object_or_404(Resource, id=resource_uuid, user=user_id)
+                resource.file = file_data
+                resource.title = file_name
                 resource.save()
             else:
-                resource = Resource.objects.create(user=user_id, file=self.request.data['file'], title=self.request.data['fileName'])
+                resource = Resource.objects.create(user=user_id, file=file_data, title=file_name)
                 episode.resources.add(resource)
 
             return self.send_response('Episode Resource Edited Successful', status=status.HTTP_200_OK)
@@ -1317,23 +1321,23 @@ class EditEpisodeExternalResourceView(StandardAPIView):
         payload = validate_token(request)
         user_id = payload['user_id']
 
-        try:
-            episode = get_object_or_404(Episode, id=self.request.data['episodeUUID'], user=user_id)
-            resourceUUID = self.request.data.get('resourceUUID')
-            if resourceUUID:
-                resource = get_object_or_404(Resource, id=resourceUUID, user=user_id)
-                resource.url = self.request.data['url']
-                resource.title = self.request.data['title']
-                resource.save()
-            else:
-                resource = Resource.objects.create(user=user_id, url=self.request.data['url'], title=self.request.data['title'])
-                episode.resources.add(resource)
+        # try:
+        episode = get_object_or_404(Episode, id=self.request.data['episodeUUID'], user=user_id)
+        resourceUUID = self.request.data.get('resourceUUID')
+        if resourceUUID:
+            resource = get_object_or_404(Resource, id=resourceUUID, user=user_id)
+            resource.url = self.request.data['url']
+            resource.title = self.request.data['title']
+            resource.save()
+        else:
+            resource = Resource.objects.create(user=user_id, url=self.request.data['url'], title=self.request.data['title'])
+            episode.resources.add(resource)
 
-            return self.send_response('Episode Resource Edited Successful', status=status.HTTP_200_OK)
-        except PermissionDenied as e:
-            return self.send_error(str(e), status=status.HTTP_403_FORBIDDEN)
-        except Exception as e:
-            return self.send_error(str(e), status=status.HTTP_400_BAD_REQUEST)
+        return self.send_response('Episode Resource Edited Successful', status=status.HTTP_200_OK)
+        # except PermissionDenied as e:
+        #     return self.send_error(str(e), status=status.HTTP_403_FORBIDDEN)
+        # except Exception as e:
+        #     return self.send_error(str(e), status=status.HTTP_400_BAD_REQUEST)
 
 class DeleteResourceView(StandardAPIView):
     permission_classes = (permissions.AllowAny,)
@@ -1518,34 +1522,34 @@ class UpdateWhoIsForView(StandardAPIView):
         user_id = payload['user_id']
         data = self.request.data
 
-        try:
-            course = get_object_or_404(Course, id=data['courseUUID'][0], author=user_id)
+        # try:
+        course = get_object_or_404(Course, id=data['courseUUID'], author=user_id)
 
-            result = []
-            for whoIsForItem in data['whoIsForList']:
-                if whoIsForItem['title'] == "":
-                    continue 
-                obj, created = WhoIsFor.objects.update_or_create(
-                    id=whoIsForItem['id'], user=user_id, course=course,
-                    defaults={
-                        'title': whoIsForItem['title'], 
-                        'position_id': whoIsForItem['position_id'],
-                    },
-                )
-                result.append(obj)
+        result = []
+        for whoIsForItem in data['whoIsForList']:
+            if whoIsForItem['title'] == "":
+                continue 
+            obj, created = WhoIsFor.objects.update_or_create(
+                id=whoIsForItem['id'], user=user_id, course=course,
+                defaults={
+                    'title': whoIsForItem['title'], 
+                    'position_id': whoIsForItem['position_id'],
+                },
+            )
+            result.append(obj)
 
-                if(created):
-                    course.who_is_for.add(obj)
+            if(created):
+                course.who_is_for.add(obj)
 
-            course_data = get_course_data(course.id, user_id)
+        course_data = get_course_data(course.id, user_id)
 
-            return self.send_response(course_data, status=status.HTTP_200_OK)
-        except Course.DoesNotExist:
-            return self.send_error('Course with this ID does not exist or user_id did not match with course author', status=status.HTTP_404_NOT_FOUND)
-        except PermissionDenied as e:
-            return self.send_error(str(e), status=status.HTTP_403_FORBIDDEN)
-        except:
-            return self.send_error('Bad Request', status=status.HTTP_400_BAD_REQUEST)
+        return self.send_response(course_data, status=status.HTTP_200_OK)
+        # except Course.DoesNotExist:
+        #     return self.send_error('Course with this ID does not exist or user_id did not match with course author', status=status.HTTP_404_NOT_FOUND)
+        # except PermissionDenied as e:
+        #     return self.send_error(str(e), status=status.HTTP_403_FORBIDDEN)
+        # except:
+        #     return self.send_error('Bad Request', status=status.HTTP_400_BAD_REQUEST)
 
 
 class DeleteWhoIsForView(StandardAPIView):
@@ -1555,7 +1559,7 @@ class DeleteWhoIsForView(StandardAPIView):
         user_id = payload['user_id']
 
         try:
-            course = Course.objects.get(id=self.request.data['courseUUID'][0], author=user_id)
+            course = Course.objects.get(id=self.request.data['courseUUID'], author=user_id)
         except Course.DoesNotExist:
             return self.send_error("Course not found.", status=status.HTTP_404_NOT_FOUND)
 
@@ -1584,7 +1588,7 @@ class UpdateWhatLearntView(StandardAPIView):
         data = self.request.data
 
         try:
-            course = get_object_or_404(Course, id=data['courseUUID'][0], author=user_id)
+            course = get_object_or_404(Course, id=data['courseUUID'], author=user_id)
 
             result = []
             for item in data['whatlearntList']:
@@ -1619,7 +1623,7 @@ class DeleteWhatLearntView(StandardAPIView):
         user_id = payload['user_id']
 
         try:
-            course = Course.objects.get(id=self.request.data['courseUUID'][0], author=user_id)
+            course = Course.objects.get(id=self.request.data['courseUUID'], author=user_id)
         except Course.DoesNotExist:
             return self.send_error("Course not found.", status=status.HTTP_404_NOT_FOUND)
 
@@ -1648,7 +1652,7 @@ class UpdateRequisiteView(StandardAPIView):
         data = self.request.data
 
         try:
-            course = get_object_or_404(Course, id=data['courseUUID'][0], author=user_id)
+            course = get_object_or_404(Course, id=data['courseUUID'], author=user_id)
 
             result = []
             for item in data['requisitesList']:
@@ -1684,7 +1688,7 @@ class DeleteRequisiteView(StandardAPIView):
         user_id = payload['user_id']
 
         try:
-            course = Course.objects.get(id=self.request.data['courseUUID'][0], author=user_id)
+            course = Course.objects.get(id=self.request.data['courseUUID'], author=user_id)
         except Course.DoesNotExist:
             return self.send_error("Course not found.", status=status.HTTP_404_NOT_FOUND)
 
@@ -2180,6 +2184,7 @@ class UpdateCourseViewsView(StandardAPIView):
         
 
 class GetAuthorCourseSections(StandardAPIView):
+    permission_classes = (permissions.AllowAny,)
     def get(self,request, courseUUID,*args, **kwargs):
         payload = validate_token(request)
         user_id = payload['user_id']
@@ -2197,44 +2202,68 @@ class GetAuthorCourseSections(StandardAPIView):
             return self.send_error(str(e), status=status.HTTP_400_BAD_REQUEST)
         
 
+def parse_image_query_dict(query_dict):
+    data = dict(query_dict)
+    images_data = {}
+    for key, value in data.items():
+        if key.startswith("imagesList"):
+            index, attr = key.split("].", 1)
+            index = int(index.split("[")[1])
+            if index not in images_data:
+                images_data[index] = {}
+            images_data[index][attr] = value[0]
+        else:
+            data[key] = value[0]
+
+    data['imagesList'] = [v for k, v in images_data.items()]
+    return data
 
 class UpdateImageView(StandardAPIView):
     permission_classes = (permissions.AllowAny,)
-    def post(self, request, format=None):
 
+    def post(self, request, format=None):
         payload = validate_token(request)
         user_id = payload['user_id']
-        data = self.request.data
-
+        query_dict_data = request.POST  # Get the QueryDict data from the POST request
+        data = parse_image_query_dict(query_dict_data)  # Convert the QueryDict to the desired dictionary format
         try:
-            course = get_object_or_404(Course, id=data['courseUUID'][0], author=user_id)
+            course = get_object_or_404(Course, id=data['courseUUID'], author=user_id)
 
+            allowed_extensions = ['jpg', 'jpeg', 'png']
+            
             result = []
             for image in data['imagesList']:
-                
+                defaults = {'title': image['title'], 'position_id': image['position_id']}
                 if ';base64,' in image['file']:
                     format, imgstr = image['file'].split(';base64,')
                     ext = format.split('/')[-1]
-                    data = ContentFile(base64.b64decode(imgstr), name='temp.' + ext)
+                    data = ContentFile(base64.b64decode(imgstr))
+
+                    # Generate a unique file name
+                    file_name, file_ext = os.path.splitext(image['title'])
+                    unique_name = f"{file_name}_{secrets.token_hex(8)}{file_ext}"
+                    data.name = unique_name
                     
                     # validate the file type
-                    if ext not in ['jpg', 'jpeg', 'png']:
+                    if ext not in allowed_extensions:
                         raise ValidationError('Invalid file type. Only jpeg and png are allowed.')
 
                     # validate the file size
                     if data.size > 2000000:
                         raise ValidationError('File size should be less than 2MB')
                     
-                    image['file'] = data
-                elif image['file'].startswith('/media/'):
-                    # Do nothing, the value is a file path
-                    pass
+                    defaults['file'] = data
+                elif image['file'].startswith('/media/') or image['file'].startswith('http'):
+                    # Validate the file type based on the URL
+                    file_name, file_ext = os.path.splitext(image['file'])
+                    if file_ext[1:] not in allowed_extensions:
+                        raise ValidationError('Invalid file type. Only jpeg and png are allowed.')
                 else:
                     raise ValidationError('Invalid image file format.')
 
                 obj, created = Image.objects.update_or_create(
                     id=image['id'], author=user_id, course=course,
-                    defaults={'title': image['title'], 'position_id': image['position_id'], 'file': image['file']},
+                    defaults=defaults,
                 )
                 result.append(obj)
 
@@ -2242,7 +2271,6 @@ class UpdateImageView(StandardAPIView):
                     course.images.add(obj)
 
             course_data = get_course_data(course.id, user_id)
-
             return self.send_response(course_data, status=status.HTTP_200_OK)
         except Course.DoesNotExist:
             return self.send_error('Course with this ID does not exist or user_id did not match with course author',status=status.HTTP_404_NOT_FOUND)
@@ -2259,7 +2287,7 @@ class DeleteImageView(StandardAPIView):
         user_id = payload['user_id']
 
         try:
-            course = Course.objects.get(id=self.request.data['courseUUID'][0], author=user_id)
+            course = Course.objects.get(id=self.request.data['courseUUID'], author=user_id)
         except Course.DoesNotExist:
             return self.send_error("Product not found.", status=status.HTTP_404_NOT_FOUND)
 
@@ -2278,43 +2306,68 @@ class DeleteImageView(StandardAPIView):
         else:
             return self.send_error('Only the course author may delete this', status=status.HTTP_401_UNAUTHORIZED)
 
+def parse_video_query_dict(query_dict):
+    data = dict(query_dict)
+    videos_data = {}
+    for key, value in data.items():
+        if key.startswith("videosList"):
+            index, attr = key.split("].", 1)
+            index = int(index.split("[")[1])
+            if index not in videos_data:
+                videos_data[index] = {}
+            videos_data[index][attr] = value[0]
+        else:
+            data[key] = value[0]
 
+    data['videosList'] = [v for k, v in videos_data.items()]
+    return data
 class UpdateVideoView(StandardAPIView):
     permission_classes = (permissions.AllowAny,)
-    def post(self, request, format=None):
 
+    def post(self, request, format=None):
         payload = validate_token(request)
         user_id = payload['user_id']
-        data = self.request.data
-
+        query_dict_data = request.POST  # Get the QueryDict data from the POST request
+        data = parse_video_query_dict(query_dict_data)  # Convert the QueryDict to the desired dictionary format
         try:
-            course = get_object_or_404(Course, id=data['courseUUID'][0], author=user_id)
+            course = get_object_or_404(Course, id=data['courseUUID'], author=user_id)
+            course_data = get_course_data(course.id, user_id)
+
+            allowed_extensions = ['mp4', 'm4v', 'mpeg', 'm4p', 'asf', 'mkv', 'webm']
 
             result = []
-            for video in data['videosList']:            
+            for video in data['videosList']:
+                defaults = {'title': video['title'], 'position_id': video['position_id']}
                 if ';base64,' in video['file']:
                     format, videostr = video['file'].split(';base64,')
                     ext = format.split('/')[-1]
-                    video_data = ContentFile(base64.b64decode(videostr), name='temp.' + ext)
-                    
+                    data = ContentFile(base64.b64decode(videostr))
+
+                    # Generate a unique file name
+                    file_name, file_ext = os.path.splitext(video['title'])
+                    unique_name = f"{file_name}_{secrets.token_hex(8)}{file_ext}"
+                    data.name = unique_name
+
                     # validate the file type
-                    if ext not in ['mp4', 'm4v', 'mpeg', 'm4p', '.asf', 'mkv', 'webm']:
-                        raise ValidationError('Invalid file type. Only mp4,m4v,mpeg,m4p,.asf,mkv,webm are allowed.')
+                    if ext not in allowed_extensions:
+                        raise ValidationError('Invalid file type. Only mp4,m4v,mpeg,m4p,asf,mkv,webm are allowed.')
 
                     # validate the file size
-                    if video_data.size > 2000000000:
+                    if data.size > 2 * 1024 * 1024 * 1024:
                         raise ValidationError('File size should be less than 2GB')
-                    
-                    video['file'] = video_data
-                elif video['file'].startswith('/media/'):
-                    # Do nothing, the value is a file path
-                    pass
+
+                    defaults['file'] = data
+                elif video['file'].startswith('/media/') or video['file'].startswith('http'):
+                    # Validate the file type based on the URL
+                    file_name, file_ext = os.path.splitext(video['file'])
+                    if file_ext[1:] not in allowed_extensions:
+                        raise ValidationError('Invalid file type. Only mp4,m4v,mpeg,m4p,asf,mkv,webm are allowed.')
                 else:
                     raise ValidationError('Invalid video file format.')
 
                 obj, created = Video.objects.update_or_create(
                     id=video['id'], author=user_id, course=course,
-                    defaults={'title': video['title'], 'position_id': video['position_id'], 'file': video['file']},
+                    defaults=defaults,
                 )
                 result.append(obj)
 
@@ -2322,8 +2375,8 @@ class UpdateVideoView(StandardAPIView):
                     course.videos.add(obj)
 
             course_data = get_course_data(course.id, user_id)
-
             return self.send_response(course_data, status=status.HTTP_200_OK)
+
         except Course.DoesNotExist:
             return self.send_error('Course with this ID does not exist or user_id did not match with course author',status=status.HTTP_404_NOT_FOUND)
         except PermissionDenied as e:
@@ -2339,7 +2392,7 @@ class DeleteVideoView(StandardAPIView):
         user_id = payload['user_id']
 
         try:
-            course = Course.objects.get(id=self.request.data['courseUUID'][0], author=user_id)
+            course = Course.objects.get(id=self.request.data['courseUUID'], author=user_id)
         except Course.DoesNotExist:
             return self.send_error("Course not found.", status=status.HTTP_404_NOT_FOUND)
 
@@ -2369,7 +2422,7 @@ class UpdateCourseWelcomeMessage(StandardAPIView):
         data = self.request.data
 
         try:
-            course = get_object_or_404(Course, id=data['courseUUID'][0], author=user_id)
+            course = get_object_or_404(Course, id=data['courseUUID'], author=user_id)
 
             course.welcome_message = data['message']
             course.save()
@@ -2393,7 +2446,7 @@ class UpdateCourseCongratsMessage(StandardAPIView):
         data = self.request.data
 
         try:
-            course = get_object_or_404(Course, id=data['courseUUID'][0], author=user_id)
+            course = get_object_or_404(Course, id=data['courseUUID'], author=user_id)
 
             course.congrats_message = data['message']
             course.save()
