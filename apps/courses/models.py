@@ -239,7 +239,7 @@ class Course(models.Model):
 
     def first_image(self):
         if self.images.all().exists():
-            return self.images.all()[0]
+            return self.images.all()[0].file
         return None
 
     def get_rating(self):

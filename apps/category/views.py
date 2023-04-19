@@ -7,6 +7,7 @@ from rest_framework import permissions
 from .models import Category, ViewCount
 from rest_framework.pagination import PageNumberPagination
 from slugify import slugify
+from django.core.cache import cache
 
 
 class PrimaryCategoriesView(StandardAPIView):
@@ -99,9 +100,16 @@ class ListCategoriesView(APIView):
 
 class ListPopularTopicsView(StandardAPIView):
     def get(self, request, format=None):
-        categories = Category.objects.order_by('views').all()[:int(6)]
-        serializer = CategorySerializer(categories, many=True)
-        return self.send_response(serializer.data, status=status.HTTP_200_OK)
+        cache_key = "popular_topics"
+        popular_topics = cache.get(cache_key)
+
+        if popular_topics is None:
+            categories = Category.objects.order_by('views').all()[:int(6)]
+            serializer = CategorySerializer(categories, many=True)
+            cache.set(cache_key, serializer.data, 900)  # Cache for 15 minutes
+            return self.send_response(serializer.data, status=status.HTTP_200_OK)
+        else:
+            return self.send_response(popular_topics, status=status.HTTP_200_OK)
 
 
 class CategoryDetailView(APIView):

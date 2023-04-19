@@ -195,8 +195,11 @@ def is_valid_nft_address(address):
     return len(address) == 42
 
 
-def get_discounted_course(**kwargs):
-    course = get_object_or_404(Course, Q(status='published') | Q(status='draft'), **kwargs)
+def get_discounted_course(query=None, **kwargs):
+    if query is None:
+        query = Course.objects
+
+    course = get_object_or_404(query.filter(Q(status='published') | Q(status='draft')), **kwargs)
     date_now = timezone.now()
     discount_key = f"discount-{course.id}"
     discount = cache.get(discount_key)
@@ -213,32 +216,46 @@ def get_discounted_course(**kwargs):
     return course, discount
 
 def get_public_course_data(identifier):
-    if is_valid_uuid(identifier):
-        course, discount = get_discounted_course(id=identifier)
-    elif is_valid_nft_address(identifier):
-        course, discount = get_discounted_course(nft_address=identifier)
-    else:
-        course, discount = get_discounted_course(slug=identifier)
-        
+    cache_key = f"public_course_data_{identifier}"
+    course_data = cache.get(cache_key)
 
-    videos = VideoSerializer(course.videos.all(), many=True)
-    images = ImageSerializer(course.images.all(), many=True)
-    what_learnt = RequisiteSerializer(course.what_learnt.all(), many=True)
-    requisites = RequisiteSerializer(course.requisites.all(), many=True)
-    who_is_for = WhoIsForSerializer(course.who_is_for.all(), many=True)
-    resources = ResourceSerializer(course.resources.all(), many=True)
-    course = CourseSerializer(course)
+    if course_data is None:
+        if is_valid_uuid(identifier):
+            course_query = Course.objects.prefetch_related(
+                'videos', 'images', 'what_learnt', 'requisites', 'who_is_for', 'resources'
+            )
+            course, discount = get_discounted_course(id=identifier, query=course_query)
+        elif is_valid_nft_address(identifier):
+            course_query = Course.objects.prefetch_related(
+                'videos', 'images', 'what_learnt', 'requisites', 'who_is_for', 'resources'
+            )
+            course, discount = get_discounted_course(nft_address=identifier, query=course_query)
+        else:
+            course_query = Course.objects.prefetch_related(
+                'videos', 'images', 'what_learnt', 'requisites', 'who_is_for', 'resources'
+            )
+            course, discount = get_discounted_course(slug=identifier, query=course_query)
 
-    course_data = {
-        'videos': videos.data,
-        'images': images.data,
-        'whatlearnt': what_learnt.data,
-        'requisites': requisites.data,
-        'who_is_for': who_is_for.data,
-        'resources': resources.data,
-        'details': course.data,
-        'discount': discount,
-    }
+        videos = VideoSerializer(course.videos.all(), many=True)
+        images = ImageSerializer(course.images.all(), many=True)
+        what_learnt = RequisiteSerializer(course.what_learnt.all(), many=True)
+        requisites = RequisiteSerializer(course.requisites.all(), many=True)
+        who_is_for = WhoIsForSerializer(course.who_is_for.all(), many=True)
+        resources = ResourceSerializer(course.resources.all(), many=True)
+        course = CourseSerializer(course)
+
+        course_data = {
+            'videos': videos.data,
+            'images': images.data,
+            'whatlearnt': what_learnt.data,
+            'requisites': requisites.data,
+            'who_is_for': who_is_for.data,
+            'resources': resources.data,
+            'details': course.data,
+            'discount': discount,
+        }
+
+        cache.set(cache_key, course_data, 900)  # Cache for 15 minutes
 
     return course_data
 
@@ -1160,22 +1177,41 @@ class DeleteEpisodeView(StandardAPIView):
 class EditEpisodeVideo(StandardAPIView):
     permission_classes = (permissions.AllowAny,)
     parser_classes = [MultiPartParser, FormParser]
-    def put(self, request, format=None):
 
+    def put(self, request, format=None):
         payload = validate_token(request)
         user_id = payload['user_id']
 
-        episode = Episode.objects.get(id=self.request.data['episodeUUID'], user=user_id)
+        episode = Episode.objects.get(id=request.data['episodeUUID'], user=user_id)
 
-        data = self.request.data
+        data = dict(request.data)
 
-        video = data['video']
-        filename =data['filename']
+        video = data['video'][0]
+        filename = data['filename'][0]
 
-        episode.file=video
-        episode.filename=filename
+        format, videostr = video.split(';base64,')
+        ext = format.split('/')[-1]
+        decoded_video = ContentFile(base64.b64decode(videostr))
+
+        allowed_extensions = ['mp4', 'm4v', 'mpeg', 'm4p', 'asf', 'mkv', 'webm']
+
+        # Generate a unique file name
+        file_name, file_ext = os.path.splitext(filename)
+        unique_name = f"{file_name}_{secrets.token_hex(8)}{file_ext}"
+        decoded_video.name = unique_name
+
+        # validate the file type
+        if ext not in allowed_extensions:
+            raise ValidationError('Invalid file type. Only mp4, m4v, mpeg, m4p, asf, mkv, webm are allowed.')
+
+        # validate the file size
+        if decoded_video.size > 2 * 1024 * 1024 * 1024:
+            raise ValidationError('File size should be less than 2GB')
+
+        episode.file = decoded_video
+        episode.filename = filename
         episode.save()
-        
+
         return self.send_response('Episode Video Edited Successful', status=status.HTTP_200_OK)
 
 class DeleteEpisodeVideo(StandardAPIView):
@@ -1777,34 +1813,42 @@ class ListCoursesView(StandardAPIView):
 
     def get(self, request, *args, **kwargs):
         payload = validate_token(request)
-        if(payload.get('user_id')):
-            user_id = payload['user_id']
-            # Get the first 20 published courses 
-            courses_shown = Course.objects.filter(status='published').values_list('id')[:20]
-            
-            for course in courses_shown:
-                item={}
-                item['user']=user_id
-                item['course']=str(course[0])
-                producer.produce(
-                    'course_interaction',
-                    key='course_view_impressions',
-                    value=json.dumps(item).encode('utf-8')
-                )
-            producer.flush()
-            # update the impressions field for only the courses shown
-            Course.objects.filter(id__in=courses_shown).update(impressions=F('impressions') + 1)
-            courses_shown = Course.objects.filter(id__in=courses_shown)
-            serializer = CoursesListSerializer(courses_shown, many=True)
-            return self.paginate_response(request, serializer.data)
+        cache_key = "courses_shown"
+        courses_shown = cache.get(cache_key)
+
+        if courses_shown is None:
+            if(payload.get('user_id')):
+                user_id = payload['user_id']
+                # Get the first 20 published courses 
+                courses_shown = Course.objects.filter(status='published').values_list('id')[:20]
+                
+                for course in courses_shown:
+                    item={}
+                    item['user']=user_id
+                    item['course']=str(course[0])
+                    producer.produce(
+                        'course_interaction',
+                        key='course_view_impressions',
+                        value=json.dumps(item).encode('utf-8')
+                    )
+                producer.flush()
+                # update the impressions field for only the courses shown
+                Course.objects.filter(id__in=courses_shown).update(impressions=F('impressions') + 1)
+                courses_shown = Course.objects.filter(id__in=courses_shown)
+                serializer = CoursesListSerializer(courses_shown, many=True)
+                cache.set(cache_key, serializer.data, 900)  # Cache for 15 minutes
+                return self.paginate_response(request, serializer.data)
+            else:
+                # Get the first 20 published courses 
+                courses_shown = Course.objects.filter(status='published').values_list('id', flat=True)[:20]
+                # update the impressions field for only the courses shown
+                Course.objects.filter(id__in=courses_shown).update(impressions=F('impressions') + 1)
+                courses_shown = Course.objects.filter(id__in=courses_shown)
+                serializer = CoursesListSerializer(courses_shown, many=True)
+                cache.set(cache_key, serializer.data, 900)  # Cache for 15 minutes
+                return self.paginate_response(request, serializer.data)
         else:
-            # Get the first 20 published courses 
-            courses_shown = Course.objects.filter(status='published').values_list('id', flat=True)[:20]
-            # update the impressions field for only the courses shown
-            Course.objects.filter(id__in=courses_shown).update(impressions=F('impressions') + 1)
-            courses_shown = Course.objects.filter(id__in=courses_shown)
-            serializer = CoursesListSerializer(courses_shown, many=True)
-            return self.paginate_response(request, serializer.data)    
+            return self.paginate_response(request, courses_shown)
 
 
 class ListCoursesFromIDListView(StandardAPIView):
@@ -1812,13 +1856,18 @@ class ListCoursesFromIDListView(StandardAPIView):
 
     def post(self, request, *args, **kwargs):
         data = request.data
+        cache_key = 'course_items_' + '_'.join([str(item['course']) for item in data])
+        cached_result = cache.get(cache_key)
+
+        if cached_result:
+            return self.send_response(cached_result, status=status.HTTP_200_OK)
+
         course_items = []
         for item in data:
             course = Course.objects.get(id=item['course'])
             coupon = item['coupon'] if item['coupon'] else None
 
             if coupon:
-                # print('Coupon: ',coupon)
                 response = requests.get(f'{coupons_ms_url}/api/coupons/get/' + coupon).json()
             else:
                 response = None
@@ -1837,6 +1886,10 @@ class ListCoursesFromIDListView(StandardAPIView):
                 'coupon':response['results'] if coupon else None,
             }
             course_items.append(course_item)
+
+        # Cache the result
+        cache.set(cache_key, course_items, 300)  # Cache for 300 seconds
+
         return self.send_response(course_items, status=status.HTTP_200_OK)
 
 def get_course_by_identifier(identifier):
@@ -2629,7 +2682,7 @@ class DeleteQuestionView(StandardAPIView):
 class AddQuestionLikeView(APIView):
     permission_classes = (permissions.AllowAny,)
 
-    def post(self, request, format=None):
+    def put(self, request, format=None):
         payload = validate_token(request)
         user_id_str = payload['user_id']
         user_id = UUID(user_id_str)
@@ -2725,9 +2778,14 @@ class AcceptAnswerView(StandardAPIView):
         if question.user == user_id:
             if answer.is_accepted_answer:
                 answer.is_accepted_answer = False
+                question.has_accepted_answer = False
+                question.correct_answer = None
             else:
                 answer.is_accepted_answer = True
+                question.has_accepted_answer = True
+                question.correct_answer = answer
             answer.save()  # Save the updated answer object
+            question.save()  # Save the updated question object
 
             return self.send_response('Success', status=status.HTTP_200_OK)
         else:
@@ -2757,7 +2815,8 @@ class DeleteAnswerView(StandardAPIView):
 class AddOrRemoveAnswerLikeView(APIView):
     permission_classes = (permissions.AllowAny,)
 
-    def post(self, request, format=None):
+    def put(self, request, format=None):
+
         payload = validate_token(request)
         user_id_str = payload['user_id']
         user_id = UUID(user_id_str)
@@ -2785,6 +2844,53 @@ class AddOrRemoveAnswerLikeView(APIView):
 
         return Response({'success': 'Answer liked'}, status=status.HTTP_200_OK)
 
+def get_courses_from_db(user_paid, filter_by, order_by, author, category, search):
+    # Get the courses from the PaidItem model
+    courses = Course.objects.filter(paiditem__in=user_paid.courses.all())
+
+    if filter_by == 'published':
+        courses = courses.filter(status='date_created')
+    elif filter_by == 'unpublished':
+        courses = courses.filter(status='draft')
+
+    if category and 'null' not in category:
+        q_obj = Q()
+        for cat in category:
+            q_obj |= Q(category=cat)
+        courses = courses.filter(q_obj)
+
+    if author and 'null' not in author:
+        q_obj = Q()
+        for auth in author:
+            q_obj |= Q(author=auth)
+        courses = courses.filter(q_obj)
+
+    if search and 'null' not in search:
+        search_results = Course.objects.filter(
+            Q(title__icontains=search) |
+            Q(description__icontains=search) |
+            Q(short_description__icontains=search) |
+            Q(keywords__icontains=search) |
+            Q(category__name__icontains=search) |
+            Q(category__title__icontains=search) |
+            Q(category__description__icontains=search)
+        )
+
+        courses = search_results.filter(paiditem__in=user_paid.courses.all())
+
+    if order_by == 'oldest':
+        courses = courses.order_by('published')
+    elif order_by == 'az':
+        courses = courses.order_by('title')
+    elif order_by == 'za':
+        courses = courses.order_by('-title')
+    elif order_by == 'sold':
+        courses = courses.order_by('sold')
+    else:
+        courses = courses.order_by(order_by)
+        
+    return courses
+
 
 class ListPaidCourses(StandardAPIView):
     permission_classes = (permissions.AllowAny,)
@@ -2795,71 +2901,28 @@ class ListPaidCourses(StandardAPIView):
 
         # Get the user's Paid object
         user_paid = Paid.objects.get(user=user_id)
-        
-        # Get the courses from the PaidItem model
-        courses = Course.objects.filter(paiditem__in=user_paid.courses.all())
 
         # Get filter parameter
         author = request.query_params.getlist('author', None)
         category = request.query_params.getlist('category', None)
-        business_activity = request.query_params.getlist('business_activity', None)
-        type = request.query_params.getlist('type', None)
         filter_by = request.query_params.get('filter', None)
-        order_by = request.query_params.get('order', '-published')
+        order_by = request.query_params.get('order', '-date_created')
         search = request.query_params.get('search', None)
+        
+        # Create a cache key based on the user_id and query parameters
+        cache_key = f'paid_courses_{user_id}_{author}_{category}_{filter_by}_{order_by}_{search}'
 
-        if filter_by == 'published':
-            courses = courses.filter(status='published')
-        elif filter_by == 'unpublished':
-            courses = courses.filter(status='draft')
+        # Try to get the courses from the cache
+        cached_courses = cache.get(cache_key)
 
-        if category and 'null' not in category:
-            q_obj = Q()
-            for cat in category:
-                q_obj |= Q(category=cat)
-            courses = courses.filter(q_obj)
+        if cached_courses is None:
+            # If courses are not in the cache, fetch them from the database
+            courses = get_courses_from_db( user_paid, filter_by, order_by, author, category, search)
 
-        if author and 'null' not in author:
-            q_obj = Q()
-            for auth in author:
-                q_obj |= Q(author=auth)
-            courses = courses.filter(q_obj)
-
-        if business_activity and 'null' not in business_activity:
-            q_obj = Q()
-            for b_activity in business_activity:
-                q_obj |= Q(business_activity=b_activity)
-            courses = courses.filter(q_obj)
-
-        if type and 'null' not in type:
-            q_obj = Q()
-            for t in type:
-                q_obj |= Q(type=t)
-            courses = courses.filter(q_obj)
-
-        if search and 'null' not in search:
-            search_results = Course.objects.filter(
-                Q(title__icontains=search) |
-                Q(description__icontains=search) |
-                Q(short_description__icontains=search) |
-                Q(keywords__icontains=search) |
-                Q(category__name__icontains=search) |
-                Q(category__title__icontains=search) |
-                Q(category__description__icontains=search)
-            )
-
-            courses = search_results.filter(paiditem__in=user_paid.courses.all())
-
-        if order_by == 'oldest':
-            courses = courses.order_by('published')
-        elif order_by == 'az':
-            courses = courses.order_by('title')
-        elif order_by == 'za':
-            courses = courses.order_by('-title')
-        elif order_by == 'sold':
-            courses = courses.order_by('sold')
+            # Cache the courses for 5 minutes (300 seconds)
+            cache.set(cache_key, courses, 300)
         else:
-            courses = courses.order_by(order_by)
+            courses = cached_courses
 
         serializer = CoursesListSerializer(courses, many=True)
 
@@ -3053,6 +3116,13 @@ class ListWishlistCourses(StandardAPIView):
 class SearchCoursesView(StandardAPIView):
     permission_classes = (permissions.AllowAny,)
     def get(self, request, *args, **kwargs):
+        # Create cache key based on query parameters
+        cache_key = f"search_courses_{request.META['QUERY_STRING']}"
+        cached_result = cache.get(cache_key)
+
+        if cached_result:
+            return self.paginate_response(request, cached_result)
+        
         courses = Course.objects.all()
         # Get filter parameter
         order_by = request.query_params.get('order', '-published')
@@ -3152,5 +3222,6 @@ class SearchCoursesView(StandardAPIView):
             courses = courses.filter(author=author)
 
         serializer = CoursesListSerializer(courses, many=True)
-
+        # Cache the result
+        cache.set(cache_key, serializer.data, 300)  # Cache for 300 seconds
         return self.paginate_response(request, serializer.data)

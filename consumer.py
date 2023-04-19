@@ -6,6 +6,7 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "core.settings")
 django.setup()
 
 from django.apps import apps
+from django.core.cache import cache
 
 Course = apps.get_model('courses', 'Course')
 Paid = apps.get_model('courses', 'Paid')
@@ -148,6 +149,9 @@ while True:
                 paid_item = PaidItem(course=course)
                 paid_item.save()
                 paid_library.courses.add(paid_item)
+                # Invalidate cache for the user by deleting cache keys associated with that user
+                cache_keys_to_delete = cache.keys(f'paid_courses_{user_id}_*')
+                cache.delete_many(cache_keys_to_delete)
 
 
 consumer1.close()

@@ -54,12 +54,8 @@ class WhatLearntSerializer(serializers.ModelSerializer):
 
 class CoursesListSerializer(serializers.ModelSerializer):
     # best_seller=serializers.BooleanField(source='get_best_seller')
-    thumbnail=serializers.BooleanField(source='first_image')
+    thumbnail = serializers.ImageField(source='first_image')
     category=serializers.CharField(source='get_category_name')
-    videos=VideoSerializer(many=True)
-    images=ImageSerializer(many=True)
-    total_duration=serializers.CharField(source='total_course_length')
-    get_whatlearnt=WhatLearntSerializer(many=True)
     student_rating=serializers.IntegerField(source='get_rating')
     student_rating_no=serializers.IntegerField(source='get_no_rating')
     class Meta:
@@ -68,32 +64,22 @@ class CoursesListSerializer(serializers.ModelSerializer):
             "id",
             "token_id",
             "nft_address",
-            "author",
             "title",
             "thumbnail",
             "description",
             'short_description',
             "language",
             "best_seller",
-            "status",
             "published",
             'payment',
             'slug',
             'price',
-            'stock',
             'compare_price',
             'discount_until',
             'discount',
             'student_rating',
             'student_rating_no',
             'category',
-            'progress',
-            'videos',
-            'images',
-            'total_duration',
-            'students',
-            'level',
-            'get_whatlearnt'
         ]
 
 
@@ -336,30 +322,6 @@ class LikeSerializer(serializers.ModelSerializer):
         ]
 
 
-class QuestionSerializer(serializers.ModelSerializer):
-    episode=EpisodePaidSerializer()
-    likes=LikeSerializer(many=True)
-    count=serializers.CharField(source='likes_count')
-    dislikes=serializers.CharField(source='dislikes_count')
-    answers_count=serializers.CharField(source='get_answers_count')
-    # answers=serializers.CharField(source='get_answers')
-    class Meta:
-        model=Question
-        fields=[
-            'id',
-            'user',
-            'title',
-            'body',
-            'created_date',
-            'correct_answer',
-            'update_date',
-            'has_accepted_answer',
-            'episode',
-            'likes',
-            'count',
-            'dislikes',
-            'answers_count',
-        ]
 
 
 class AnswerSerializer(serializers.ModelSerializer):
@@ -379,6 +341,32 @@ class AnswerSerializer(serializers.ModelSerializer):
             # 'dislikes',
         ]
 
+
+class QuestionSerializer(serializers.ModelSerializer):
+    episode=EpisodePaidSerializer()
+    likes=LikeSerializer(many=True)
+    count=serializers.CharField(source='likes_count')
+    dislikes=serializers.CharField(source='dislikes_count')
+    answers_count=serializers.CharField(source='get_answers_count')
+    # answers=serializers.CharField(source='get_answers')
+    correct_answer = AnswerSerializer()
+    class Meta:
+        model=Question
+        fields=[
+            'id',
+            'user',
+            'title',
+            'body',
+            'created_date',
+            'correct_answer',
+            'update_date',
+            'has_accepted_answer',
+            'episode',
+            'likes',
+            'count',
+            'dislikes',
+            'answers_count',
+        ]
 
 
 class PaidSerializer(serializers.ModelSerializer):
