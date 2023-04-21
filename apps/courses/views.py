@@ -255,7 +255,7 @@ def get_public_course_data(identifier):
             'discount': discount,
         }
 
-        cache.set(cache_key, course_data, 900)  # Cache for 15 minutes
+        cache.set(cache_key, course_data, 1800)  # Cache for 15 minutes
 
     return course_data
 
@@ -1836,7 +1836,7 @@ class ListCoursesView(StandardAPIView):
                 Course.objects.filter(id__in=courses_shown).update(impressions=F('impressions') + 1)
                 courses_shown = Course.objects.filter(id__in=courses_shown)
                 serializer = CoursesListSerializer(courses_shown, many=True)
-                cache.set(cache_key, serializer.data, 900)  # Cache for 15 minutes
+                cache.set(cache_key, serializer.data, 1800)  # Cache for 15 minutes
                 return self.paginate_response(request, serializer.data)
             else:
                 # Get the first 20 published courses 
@@ -1845,7 +1845,7 @@ class ListCoursesView(StandardAPIView):
                 Course.objects.filter(id__in=courses_shown).update(impressions=F('impressions') + 1)
                 courses_shown = Course.objects.filter(id__in=courses_shown)
                 serializer = CoursesListSerializer(courses_shown, many=True)
-                cache.set(cache_key, serializer.data, 900)  # Cache for 15 minutes
+                cache.set(cache_key, serializer.data, 1800)  # Cache for 15 minutes
                 return self.paginate_response(request, serializer.data)
         else:
             return self.paginate_response(request, courses_shown)
@@ -1888,7 +1888,7 @@ class ListCoursesFromIDListView(StandardAPIView):
             course_items.append(course_item)
 
         # Cache the result
-        cache.set(cache_key, course_items, 300)  # Cache for 300 seconds
+        cache.set(cache_key, course_items, 1800)  # Cache for 300 seconds
 
         return self.send_response(course_items, status=status.HTTP_200_OK)
 
@@ -2282,7 +2282,7 @@ class UpdateImageView(StandardAPIView):
         try:
             course = get_object_or_404(Course, id=data['courseUUID'], author=user_id)
 
-            allowed_extensions = ['jpg', 'jpeg', 'png']
+            allowed_extensions = ['jpg', 'jpeg']
             
             result = []
             for image in data['imagesList']:
@@ -2920,7 +2920,7 @@ class ListPaidCourses(StandardAPIView):
             courses = get_courses_from_db( user_paid, filter_by, order_by, author, category, search)
 
             # Cache the courses for 5 minutes (300 seconds)
-            cache.set(cache_key, courses, 300)
+            cache.set(cache_key, courses, 1800)
         else:
             courses = cached_courses
 
@@ -3223,5 +3223,5 @@ class SearchCoursesView(StandardAPIView):
 
         serializer = CoursesListSerializer(courses, many=True)
         # Cache the result
-        cache.set(cache_key, serializer.data, 300)  # Cache for 300 seconds
+        cache.set(cache_key, serializer.data, 1800)  # Cache for 300 seconds
         return self.paginate_response(request, serializer.data)
